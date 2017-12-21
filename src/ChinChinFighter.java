@@ -13,6 +13,7 @@ abstract class ChinChinPlayerBase extends JPanel {
     protected boolean is_Jump = false, is_HighJump = false, is_Dash = false, is_Squat = false;//ジャンプ,二段ジャンプ中かダッシュ中かしゃがみ中かどうか
     protected boolean is_Attack = false;//攻撃モーション中かどうか
     protected boolean before_Right = false;//直前の左右入力を保存する
+    protected boolean canBlock = false;//ガード受付状態の管理
     protected int HP;//キャラの体力
     protected Point2D.Float position; //キャラの座標
     protected float dy, dx;
@@ -20,9 +21,11 @@ abstract class ChinChinPlayerBase extends JPanel {
     protected int underLine, rightLine;//ステージ下限右限
     protected int stun, canDash;//行動不自由時間
     protected Image nowImage;
+    protected Looking look; //右を向いているか
+    protected ArrayList<AttackInfo> attackInfos;//攻撃情報を収納する
 
 
-    public ChinChinPlayerBase(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, int sizeX, int sizeY){
+    public ChinChinPlayerBase(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, int sizeX, int sizeY, boolean is_Right){
         //操作ボタンコード
         this.K_UP = K_UP;
         this.K_DOWN = K_DOWN;
@@ -31,6 +34,12 @@ abstract class ChinChinPlayerBase extends JPanel {
         this.K_WeakAttack = K_WeakAttack;
         this.K_StrongAttack = K_StrongAttack;
 
+        if(is_Right){
+            look = Looking.Right;
+        }else{
+            look = Looking.Left;
+        }
+
         underLine = ChinChinFighter.SCREEN_HEIGHT * 9 / 10 - sizeY;
         rightLine = ChinChinFighter.SCREEN_WIDTH - sizeX;
 
@@ -38,16 +47,32 @@ abstract class ChinChinPlayerBase extends JPanel {
         position = new Point2D.Float(positionX, underLine);
         size = new Point(sizeX, sizeY);
 
-
+        attackInfos = new ArrayList<AttackInfo>();
 
     }
 
     public void keyPressed(KeyEvent e) {
         int keyCode = e.getKeyCode();
-        if(keyCode == K_UP && !bK_UP){ if(bK_UP = !bK_DOWN){ Jump(true); } dx = 0;} else
+        if(keyCode == K_UP && !bK_UP){
+            if(bK_UP = !bK_DOWN){
+                Jump(true);
+                canBlock = false;
+            }
+            dx = 0;
+        } else
         if(keyCode == K_DOWN && !bK_DOWN){ if(bK_DOWN = !bK_UP){ Squat(true); } } else
-        if(keyCode == K_RIGHT && !bK_RIGHT){ if(bK_RIGHT = !bK_LEFT){ Move(true, true); } } else
-        if(keyCode == K_LEFT && !bK_LEFT){ if(bK_LEFT = !bK_RIGHT){ Move(false, true); } } else
+        if(keyCode == K_RIGHT && !bK_RIGHT){
+            if(bK_RIGHT = !bK_LEFT){
+                Move(true, true);
+                canBlock = look == Looking.Left;
+            }
+        } else
+        if(keyCode == K_LEFT && !bK_LEFT){
+            if(bK_LEFT = !bK_RIGHT){
+                Move(false, true);
+                canBlock = look == Looking.Right;
+            }
+        } else
         if(keyCode == K_WeakAttack && !bK_WeakAttack){
             bK_WeakAttack = true;
             WeakAttack(true);
@@ -61,8 +86,8 @@ abstract class ChinChinPlayerBase extends JPanel {
         int keyCode = e.getKeyCode();
         if(keyCode == K_UP){ bK_UP = false; } else
         if(keyCode == K_DOWN){ bK_DOWN = false; dx /= 2f;} else
-        if(keyCode == K_RIGHT){ bK_RIGHT = false; dx /= 2f;} else
-        if(keyCode == K_LEFT){ bK_LEFT = false; } else
+        if(keyCode == K_RIGHT){ bK_RIGHT = false; if(look == Looking.Left){canBlock = false;}} else
+        if(keyCode == K_LEFT){ bK_LEFT = false; if(look == Looking.Right){canBlock = false;}} else
         if(keyCode == K_WeakAttack){ bK_WeakAttack = false; } else
         if(keyCode == K_StrongAttack){ bK_StrongAttack = false; }
     }
@@ -78,7 +103,22 @@ abstract class ChinChinPlayerBase extends JPanel {
     //移動
     abstract protected void Move(boolean is_Right, boolean Pressed);
     //一連の行動を管理する
-    abstract public void Action();
+    public void Action(){
+        //落下処理
+        if(is_Jump) {
+            canBlock = false;
+            position.y += dy;
+            dy += 2.0f;
+            if (position.y >= underLine) {
+                is_Jump = false;
+                is_HighJump = false;
+                position.y = underLine;
+                dx = 0;
+                //ここで反転処理を行う
+                canBlock = (look == Looking.Left && bK_RIGHT) || (look == Looking.Right && bK_LEFT);
+            }
+        }
+    }
 
     public Image getNowImage(){
         return nowImage;
@@ -93,13 +133,21 @@ abstract class ChinChinPlayerBase extends JPanel {
         return HP>0;
     }
 
+    public void setLook(Looking look){
+       this.look = look;
+    }
+
+    public Looking getLook(){
+        return look;
+    }
+
 }
 
 //操作キャラA
 class FighterA extends ChinChinPlayerBase{
 
-    public FighterA(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, float positionY, int sizeX, int sizeY){
-        super(K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack, positionX, sizeX, sizeY);
+    public FighterA(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, float positionY, int sizeX, int sizeY, boolean is_Right){
+        super(K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack, positionX, sizeX, sizeY, is_Right);
         HP = 100;//体力セット
 
         nowImage = Toolkit.getDefaultToolkit().getImage(getClass().getResource("resources/playerADammy.png"));
@@ -183,21 +231,56 @@ class FighterA extends ChinChinPlayerBase{
             stun--;
         }
 
-        //落下処理
-        if(is_Jump){
-            position.y += dy;
-            dy += 2.0f;
-            if(position.y >= underLine){
-                is_Jump = false;
-                is_HighJump = false;
-                position.y = underLine;
-                dx = 0;
-            }
-        }
-
+        super.Action();
+        System.out.println(canBlock);
     }
 }
 
+//方向
+enum Looking{
+    Right(1f),
+    Left(-1f);
+
+    private final float value;
+
+    private Looking(final float value){
+        this.value = value;
+    }
+
+    public float getValue(){
+        return value;
+    }
+}
+
+//攻撃情報管理クラス
+class AttackInfo{
+    private Point StartingPoint, EndingPoint;//キャラ座標を基準とする攻撃の始点終点(右基準)
+    private int Duration, NowTime;//継続時間, 現在の時間
+    private int Damage;//ダメージ量
+
+    public AttackInfo(Point StartingPoint, Point EndingPoint, int Duration, int Damage){
+        this.StartingPoint = StartingPoint;
+        this.EndingPoint = EndingPoint;
+        this.Duration = Duration; this.NowTime = Duration;
+        this.Damage = Damage;
+    }
+
+    //アクセサメソッド
+    public Point getStartingPoint(){ return StartingPoint; }
+    public Point getEndingPoint(){ return EndingPoint; }
+    public int getDuration(){ return Duration; }
+    public int getDamage(){ return Damage; }
+
+    //継続時間を管理する
+    public boolean TimeCourse(){ return NowTime-- > 0; }
+
+    //当たり判定の確認を行う
+    public boolean judgeHitted(Point p, Point opS, Point opE){
+        //pの座標,opの当たり判定の範囲が引数
+        return p.x + EndingPoint.x >= opS.x && p.x + StartingPoint.x <= opE.x &&
+                p.y + EndingPoint.y >= opS.y && p.y + StartingPoint.y <= opE.y;
+    }
+}
 
 //-------------------------------------------------------画面構成&ゲーム管理クラス
 
@@ -218,12 +301,12 @@ class ChinChinFrameView extends JPanel implements KeyListener{
 
         //プレイヤー1
         p1size = new Point(120, 120);
-        player1 = new FighterA(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, ChinChinFighter.SCREEN_HEIGHT-p1size.y, p1size.x, p1size.y);
+        player1 = new FighterA(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, ChinChinFighter.SCREEN_HEIGHT-p1size.y, p1size.x, p1size.y, true);
         this.add(player1);
 
         //プレイヤー2
         p2size = new Point(120 , 120);
-        player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, ChinChinFighter.SCREEN_WIDTH-p2size.x, ChinChinFighter.SCREEN_HEIGHT-p2size.y, p2size.x, p2size.y);
+        player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, ChinChinFighter.SCREEN_WIDTH-p2size.x, ChinChinFighter.SCREEN_HEIGHT-p2size.y, p2size.x, p2size.y, false);
         this.add(player2);
 
         setFocusable(true);
@@ -252,8 +335,8 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         }
         if((p2image = player2.getNowImage()) != null) {
             g.drawImage(p2image,
-                    (int) p2position.x, (int) p2position.y,
-                    p2size.x, p2size.y, null);
+                    (int) p2position.x + p2size.x, (int) p2position.y,
+                    -p2size.x, p2size.y, null);
         }
 
     }
