@@ -321,24 +321,42 @@ class ChinChinFrameView extends JPanel implements KeyListener{
                 repaint();
             }
         }, 0, 20);
-
     }
 
     @Override
     public void paint(Graphics g){
         p1position = player1.getPosition();
         p2position = player2.getPosition();
+
+        //位置で向きを管理するのが一番簡単？？
         if((p1image = player1.getNowImage()) != null) {
-            g.drawImage(p1image,
+            //(p1 < p2) -> lookingRight
+            if(p1position.x < p2position.x){
+                player1.setLook(Looking.Right);
+                g.drawImage(p1image,
                     (int) p1position.x, (int) p1position.y,
                     p1size.x, p1size.y, null);
+            }else{
+                player1.setLook(Looking.Left);
+                g.drawImage(p1image,
+                    (int) p1position.x + p1size.x, (int) p1position.y, 
+                    -p1size.x, p1size.y, null);
+            }
         }
         if((p2image = player2.getNowImage()) != null) {
-            g.drawImage(p2image,
+            //p2 < p1 -> lookingRight
+            if((p2position.x < p1position.x)){
+                player2.setLook(Looking.Right);
+                g.drawImage(p1image,
+                    (int) p2position.x, (int) p2position.y,
+                    p2size.x, p2size.y, null);
+            }else{
+                player2.setLook(Looking.Left);
+                g.drawImage(p1image, 
                     (int) p2position.x + p2size.x, (int) p2position.y,
                     -p2size.x, p2size.y, null);
+            }
         }
-
     }
 
     @Override
