@@ -365,7 +365,6 @@ class ChinChinFrameView extends JPanel implements KeyListener{
                 repaint();
             }
         }, 0, 20);
-
     }
 
     @Override
