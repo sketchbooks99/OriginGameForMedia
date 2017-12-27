@@ -11,7 +11,11 @@ abstract class ChinChinPlayerBase extends JPanel {
     private final int K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack;//操作ボタンコード
     protected boolean bK_UP = false, bK_DOWN = false, bK_LEFT = false, bK_RIGHT = false, bK_WeakAttack = false, bK_StrongAttack = false;//操作ボタンのフラグ
     protected boolean is_Jump = false, is_HighJump = false, is_Dash = false, is_Squat = false;//ジャンプ,二段ジャンプ中かダッシュ中かしゃがみ中かどうか
-    protected boolean is_Attack = false;//攻撃モーション中かどうか
+
+    protected boolean canAttack = true;//攻撃できるかどうか
+    protected int interval = 0, attackId = -1;//次攻撃を受け付けるまでの時間を管理する, 前回攻撃idを引き継ぐ(-1はダミーコード)
+    protected AttackInfo attackInfo = null;//攻撃情報を収納する
+
     protected boolean before_Right = false;//直前の左右入力を保存する
     protected boolean canBlock = false;//ガード受付状態の管理
     protected int HP;//キャラの体力
@@ -19,10 +23,11 @@ abstract class ChinChinPlayerBase extends JPanel {
     protected float dy, dx;
     protected Point size;//キャラのサイズ
     protected int underLine, rightLine;//ステージ下限右限
-    protected int stun, canDash;//行動不自由時間
+    protected int stun, canDash;//行動不自由時間, ダッシュ状態を受け付けている時間
     protected Image nowImage;
     protected Looking look; //右を向いているか
-    protected ArrayList<AttackInfo> attackInfos;//攻撃情報を収納する
+
+
 
 
     public ChinChinPlayerBase(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, int sizeX, int sizeY, boolean is_Right){
@@ -46,9 +51,6 @@ abstract class ChinChinPlayerBase extends JPanel {
         //座標設定
         position = new Point2D.Float(positionX, underLine);
         size = new Point(sizeX, sizeY);
-
-        attackInfos = new ArrayList<AttackInfo>();
-
     }
 
     public void keyPressed(KeyEvent e) {
@@ -176,12 +178,31 @@ class FighterA extends ChinChinPlayerBase{
 
     @Override
     protected void WeakAttack(boolean Pressed) {
-
+        //Point StartingPoint, Point EndingPoint, int Duration, int Interval, int Damage, int id
+        if(canAttack) {
+            if (Pressed) {
+                switch (attackId) {
+                    case -1:
+                        attackInfo = new AttackInfo(new Point(10, 10), new Point(40, 40), 200, 100, 10, 1);
+                        canAttack = false;
+                        break;
+                }
+            }
+        }
     }
 
     @Override
     protected void StrongAttack(boolean Pressed) {
-
+        if(canAttack) {
+            if (Pressed) {
+                switch (attackId) {
+                    case -1:
+                        attackInfo = new AttackInfo(new Point(10, 10), new Point(40, 40), 200, 100, 10, 11);
+                        canAttack = false;
+                        break;
+                }
+            }
+        }
     }
 
     @Override
@@ -227,12 +248,17 @@ class FighterA extends ChinChinPlayerBase{
                 position.x = rightLine;
             }
 
+            //攻撃情報を扱う
+            if(attackInfo != null){
+                attackInfo.
+            }
         }else{
             stun--;
+            canAttack = false;
+            attackInfo = null;
         }
 
         super.Action();
-        System.out.println(canBlock);
     }
 }
 
@@ -255,14 +281,17 @@ enum Looking{
 //攻撃情報管理クラス
 class AttackInfo{
     private Point StartingPoint, EndingPoint;//キャラ座標を基準とする攻撃の始点終点(右基準)
-    private int Duration, NowTime;//継続時間, 現在の時間
+    private int Duration, Interval;//継続時間, 現在の時間, 攻撃後入力を受け付けない時間 (基本的にはDuration >= Interval)
     private int Damage;//ダメージ量
+    private int id;//攻撃ID
 
-    public AttackInfo(Point StartingPoint, Point EndingPoint, int Duration, int Damage){
+    public AttackInfo(Point StartingPoint, Point EndingPoint, int Duration, int Interval, int Damage, int id){
         this.StartingPoint = StartingPoint;
         this.EndingPoint = EndingPoint;
-        this.Duration = Duration; this.NowTime = Duration;
+        this.Duration = Duration;
         this.Damage = Damage;
+        this.Interval = Interval;
+        this.id = id;
     }
 
     //アクセサメソッド
@@ -272,7 +301,9 @@ class AttackInfo{
     public int getDamage(){ return Damage; }
 
     //継続時間を管理する
-    public boolean TimeCourse(){ return NowTime-- > 0; }
+    public boolean reduceDuration(){ return Duration-- < 0; }
+    //入力受けつけを管理する
+    public boolean reduceInterval(){ return Interval-- < 0;}
 
     //当たり判定の確認を行う
     public boolean judgeHitted(Point p, Point opS, Point opE){
@@ -312,6 +343,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         setFocusable(true);
         addKeyListener(this);
 
+        //
         gameThread = new java.util.Timer();
         gameThread.schedule(new TimerTask() {
             @Override
@@ -339,6 +371,9 @@ class ChinChinFrameView extends JPanel implements KeyListener{
                     -p2size.x, p2size.y, null);
         }
 
+        //当たり判定デバッグ用
+
+        //
     }
 
     @Override
@@ -359,8 +394,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
     }
 }
 
-//ゲームマスタークラス
-class ChinChinFighter extends JFrame{
+public class ChinChinFighter extends JFrame {
     private ChinChinFrameView chinChinFrameView;
     public final static int SCREEN_WIDTH = 720, SCREEN_HEIGHT = 600;
 
