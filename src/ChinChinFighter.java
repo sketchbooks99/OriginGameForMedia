@@ -1,4 +1,5 @@
 import javax.swing.*;
+import javax.swing.text.Position;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Point2D;
@@ -135,8 +136,16 @@ abstract class ChinChinPlayerBase extends JPanel {
         return HP>0;
     }
 
-    public void setLook(Looking look){
-       this.look = look;
+    //向き情報を設定し返す
+    public Looking setgetLook(Point2D.Float OpponentPos){
+       if (!is_Jump){
+           if(position.x <= OpponentPos.x){
+               return look = Looking.Right;
+           }else{
+               return look = Looking.Left;
+           }
+       }
+       return look;
     }
 
     public Looking getLook(){
@@ -250,7 +259,7 @@ class FighterA extends ChinChinPlayerBase{
 
             //攻撃情報を扱う
             if(attackInfo != null){
-                attackInfo.
+               // attackInfo.;
             }
         }else{
             stun--;
@@ -281,9 +290,10 @@ enum Looking{
 //攻撃情報管理クラス
 class AttackInfo{
     private Point StartingPoint, EndingPoint;//キャラ座標を基準とする攻撃の始点終点(右基準)
-    private int Duration, Interval;//継続時間, 現在の時間, 攻撃後入力を受け付けない時間 (基本的にはDuration >= Interval)
+    private int Duration, Interval;//攻撃継続時間, 現在の時間, 攻撃後入力を受け付けない時間 (基本的にはDuration >= Interval、モーションの時間とも一致させたら楽だと思う)
     private int Damage;//ダメージ量
     private int id;//攻撃ID
+    private boolean alreadyHit = false;//既に攻撃判定を終えているか
 
     public AttackInfo(Point StartingPoint, Point EndingPoint, int Duration, int Interval, int Damage, int id){
         this.StartingPoint = StartingPoint;
@@ -301,15 +311,17 @@ class AttackInfo{
     public int getDamage(){ return Damage; }
 
     //継続時間を管理する
-    public boolean reduceDuration(){ return Duration-- < 0; }
+    public boolean reduceDuration(){ return Duration-- < 0;}
     //入力受けつけを管理する
     public boolean reduceInterval(){ return Interval-- < 0;}
 
     //当たり判定の確認を行う
     public boolean judgeHitted(Point p, Point opS, Point opE){
         //pの座標,opの当たり判定の範囲が引数
-        return p.x + EndingPoint.x >= opS.x && p.x + StartingPoint.x <= opE.x &&
+        boolean isHitted = p.x + EndingPoint.x >= opS.x && p.x + StartingPoint.x <= opE.x &&
                 p.y + EndingPoint.y >= opS.y && p.y + StartingPoint.y <= opE.y;
+        alreadyHit |= isHitted;
+        return isHitted && !alreadyHit;
     }
 }
 
@@ -360,15 +372,31 @@ class ChinChinFrameView extends JPanel implements KeyListener{
     public void paint(Graphics g){
         p1position = player1.getPosition();
         p2position = player2.getPosition();
+
+        //位置を渡してついでにJump判定もやってもらうことにした
         if((p1image = player1.getNowImage()) != null) {
-            g.drawImage(p1image,
-                    (int) p1position.x, (int) p1position.y,
-                    p1size.x, p1size.y, null);
+            //(p1 < p2) -> lookingRight
+            if(player1.setgetLook(p2position) == Looking.Right){
+                g.drawImage(p1image,
+                        (int) p1position.x, (int) p1position.y,
+                        p1size.x, p1size.y, null);
+            }else{
+                g.drawImage(p1image,
+                        (int) p1position.x + p1size.x, (int) p1position.y,
+                        -p1size.x, p1size.y, null);
+            }
         }
         if((p2image = player2.getNowImage()) != null) {
-            g.drawImage(p2image,
-                    (int) p2position.x + p2size.x, (int) p2position.y,
-                    -p2size.x, p2size.y, null);
+            //p2 < p1 -> lookingRight
+            if(player2.setgetLook(p1position) == Looking.Right){
+                g.drawImage(p2image,
+                        (int) p2position.x, (int) p2position.y,
+                        p2size.x, p2size.y, null);
+            }else{
+                g.drawImage(p2image,
+                        (int) p2position.x + p2size.x, (int) p2position.y,
+                        -p2size.x, p2size.y, null);
+            }
         }
 
         //当たり判定デバッグ用
