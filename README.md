@@ -23,6 +23,6 @@
 ## ちんぽっぽ
 
 * 12/22
-  - キャラクターの位置によって向きが変わるようにしました。
+  - キャラクターの位置によって向きが変わるようにしました。
 * 12/28
-  - HPの表示を作りました。class ChinChinPlayerBaseに、メソッドgetHPとsetHPを追加しました。
+  - HPの表示を作りました。class ChinChinPlayerBaseに、メソッドgetHPとsetHPを追加しました。
