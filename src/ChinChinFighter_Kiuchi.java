@@ -1,4 +1,4 @@
-import javax.swing.*
+import javax.swing.*;
 import javax.swing.text.Position;
 import java.awt.*;
 import java.awt.event.*;
@@ -173,7 +173,7 @@ class FighterA extends ChinChinPlayerBase{
         return HP;
     }
 
-    @Override 
+    @Override
     protected void setHP(int HP){
         this.HP = HP;
     }
