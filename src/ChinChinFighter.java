@@ -1,5 +1,4 @@
 import javax.swing.*;
-import javax.swing.text.Position;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Point2D;
@@ -13,9 +12,9 @@ abstract class ChinChinPlayerBase extends JPanel {
     protected boolean bK_UP = false, bK_DOWN = false, bK_LEFT = false, bK_RIGHT = false, bK_WeakAttack = false, bK_StrongAttack = false;//操作ボタンのフラグ
     protected boolean is_Jump = false, is_HighJump = false, is_Dash = false, is_Squat = false;//ジャンプ,二段ジャンプ中かダッシュ中かしゃがみ中かどうか
 
-    protected boolean canAttack = true;//攻撃できるかどうか
-    protected int interval = 0, attackId = -1;//次攻撃を受け付けるまでの時間を管理する, 前回攻撃idを引き継ぐ(-1はダミーコード)
-    protected AttackInfo attackInfo = null;//攻撃情報を収納する
+    protected boolean canAttack = true;//攻撃行動できるかどうか
+    protected int canCombo = 0, attackId = -1;//コンボ技の入力受付時間を管理, 前回攻撃idを引き継ぐ(-1はダミーコード)
+    protected AttackInfo attackInfo;//攻撃情報を収納する
 
     protected boolean before_Right = false;//直前の左右入力を保存する
     protected boolean canBlock = false;//ガード受付状態の管理
@@ -27,9 +26,7 @@ abstract class ChinChinPlayerBase extends JPanel {
     protected int stun, canDash;//行動不自由時間, ダッシュ状態を受け付けている時間
     protected Image nowImage;
     protected Looking look; //右を向いているか
-
-
-
+    protected ChinChinPlayerBase OpponentPlayer;//対戦相手
 
     public ChinChinPlayerBase(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, int sizeX, int sizeY, boolean is_Right){
         //操作ボタンコード
@@ -55,9 +52,10 @@ abstract class ChinChinPlayerBase extends JPanel {
     }
 
     public void keyPressed(KeyEvent e) {
+        if(stun > 0){return;}
         int keyCode = e.getKeyCode();
         if(keyCode == K_UP && !bK_UP){
-            if(bK_UP = !bK_DOWN){
+            if(bK_UP = !bK_DOWN && !attackInfo.isHaving()){
                 Jump(true);
                 canBlock = false;
             }
@@ -65,13 +63,13 @@ abstract class ChinChinPlayerBase extends JPanel {
         } else
         if(keyCode == K_DOWN && !bK_DOWN){ if(bK_DOWN = !bK_UP){ Squat(true); } } else
         if(keyCode == K_RIGHT && !bK_RIGHT){
-            if(bK_RIGHT = !bK_LEFT){
+            if(bK_RIGHT = !bK_LEFT && !attackInfo.isHaving()){
                 Move(true, true);
                 canBlock = look == Looking.Left;
             }
         } else
         if(keyCode == K_LEFT && !bK_LEFT){
-            if(bK_LEFT = !bK_RIGHT){
+            if(bK_LEFT = !bK_RIGHT && !attackInfo.isHaving()){
                 Move(false, true);
                 canBlock = look == Looking.Right;
             }
@@ -107,6 +105,52 @@ abstract class ChinChinPlayerBase extends JPanel {
     abstract protected void Move(boolean is_Right, boolean Pressed);
     //一連の行動を管理する
     public void Action(){
+        if(canAttack = stun == 0 || stun < 0){
+            if(!attackInfo.isHaving()) {
+                if (attackId != -1 && canCombo-- <= 0) {
+                    attackId = -1;
+                }
+                if (bK_WeakAttack) {
+                    WeakAttack(false);
+                } else if (bK_StrongAttack) {
+                    StrongAttack(false);
+                }
+
+                if (bK_LEFT || bK_RIGHT) {
+                    Move(bK_RIGHT, false);
+                } else {
+                    canDash--;
+                    if (is_Dash) {
+                        is_Dash = false;
+                    }
+                    if (!is_Jump) {
+                        dx = 0;
+                    }
+                }
+
+                if (bK_UP) {
+                    Jump(false);
+                } else if (bK_DOWN) {
+                    Squat(false);
+                }
+            }
+
+        }else{
+            canCombo = 0;
+            attackId = -1;
+            stun--;
+        }
+
+        //横方向移動
+        position.x += dx;
+        if(position.x<0){
+            dx = 0;
+            position.x = 0;
+        }else if(position.x>rightLine){
+            dx = 0;
+            position.x = rightLine;
+        }
+
         //落下処理
         if(is_Jump) {
             canBlock = false;
@@ -123,34 +167,59 @@ abstract class ChinChinPlayerBase extends JPanel {
         }
     }
 
-    public Image getNowImage(){
-        return nowImage;
-    }
-    public Point2D.Float getPosition(){
-        return position;
-    }
+    public Image getNowImage(){ return nowImage; }
+
+    public Point2D.Float getPosition(){ return position; }
 
     //ダメージ情報を扱う
-    public boolean Damage(int damage){
-        HP -= damage;
+    public boolean ConfirmDamage(Point2D.Float Force, int stun, int damage){
+        if(canBlock){
+            //デバッグ
+            System.out.println("Blocked");
+
+            //ブロック出来る時
+            HP -= damage/2;
+        }else{
+            //デバッグ
+            System.out.println("Directwed");
+
+            //出来ない時
+            HP -= damage;
+            this.stun = stun;
+            dx = Force.x;
+            dy = Force.y;
+            is_Jump |= dy < 0f;//is_Jumpがfalseの時上方向加力するならtrueに
+            canAttack = false;
+        }
+        canCombo = 0; attackId = -1;
         return HP>0;
     }
+
+    public Point getMySize(){return size;}
 
     //向き情報を設定し返す
     public Looking setgetLook(Point2D.Float OpponentPos){
        if (!is_Jump){
            if(position.x <= OpponentPos.x){
+               canBlock = bK_LEFT;
                return look = Looking.Right;
            }else{
+               canBlock = bK_RIGHT;
                return look = Looking.Left;
            }
        }
        return look;
     }
+    public Looking getLook(){ return look; }
 
-    public Looking getLook(){
-        return look;
-    }
+    public int getHP(){ return HP; }
+    public void setHP(int HP){ this.HP = HP; }
+
+    public void setOpponentPlayer(ChinChinPlayerBase opponentPlayer) { OpponentPlayer = opponentPlayer; }
+
+    public AttackInfo getAttackInfo(){ return attackInfo; }
+    public void setAttackInfo(ChinChinPlayerBase Opponent){ attackInfo = new AttackInfo(this, Opponent); }
+    public void setCanAttack(boolean canAttack){ this.canAttack = canAttack; }
 
 }
 
@@ -187,14 +256,44 @@ class FighterA extends ChinChinPlayerBase{
 
     @Override
     protected void WeakAttack(boolean Pressed) {
-        //Point StartingPoint, Point EndingPoint, int Duration, int Interval, int Damage, int id
+        /*
+        attackInfo.setInfo(
+        攻撃範囲の始点[右向き基準],
+        攻撃範囲,
+        int Occurrence… 攻撃発生までの時間,
+        int Duration… 攻撃の継続時間,
+        int Interval… 次の攻撃入力を受け付けない時間,
+        int ContinuousHit… 多段ヒット攻撃ならその間隔をセットする[継続時間中は指定時間経過で攻撃判定復活],
+        int Damage… ダメージ,
+        Point2D.Float Force… 攻撃時に相手を吹っ飛ばす向き[右向き基準],
+        int stun… 攻撃を受けてひるむ時間,
+        int id… 攻撃のid)
+         */
         if(canAttack) {
             if (Pressed) {
-                switch (attackId) {
-                    case -1:
-                        attackInfo = new AttackInfo(new Point(10, 10), new Point(40, 40), 200, 100, 10, 1);
-                        canAttack = false;
-                        break;
+                if(!is_Jump) {
+                    //地上技
+                    dx = 0f;
+                    switch (attackId) {
+                        default:
+                            attackInfo.setInfo(new Point(100, 30), new Point(40, 40), 0, 5, 0, 9999, 10, new Point2D.Float(3f, -5f), 7, 1);
+                            attackId = 1;
+                            canCombo = 7;
+                            canAttack = false;
+                            break;
+                        case 1:
+                            attackInfo.setInfo(new Point(100, 30), new Point(50, 40), 0, 5, 0, 9999, 10, new Point2D.Float(3f, -10f), 7, 2);
+                            attackId = 2;
+                            canCombo = 7;
+                            canAttack = false;
+                            break;
+                        case 2:
+                            attackInfo.setInfo(new Point(100, 30), new Point(70, 40), 0, 20, 10, 9999, 10, new Point2D.Float(30f, -20f), 30, 3);
+                            attackId = -1;
+                            canCombo = 0;
+                            canAttack = false;
+                            break;
+                    }
                 }
             }
         }
@@ -206,7 +305,7 @@ class FighterA extends ChinChinPlayerBase{
             if (Pressed) {
                 switch (attackId) {
                     case -1:
-                        attackInfo = new AttackInfo(new Point(10, 10), new Point(40, 40), 200, 100, 10, 11);
+                        attackInfo.setInfo(new Point(10, 10), new Point(40, 40), 15, 20, 10, 9999,10, new Point2D.Float(40f,10f), 20, 11);
                         canAttack = false;
                         break;
                 }
@@ -216,12 +315,14 @@ class FighterA extends ChinChinPlayerBase{
 
     @Override
     protected void Move(boolean is_Right ,boolean Pressed) {
+        if(stun > 0){return;}
         if(before_Right != is_Right){
             canDash = 0;
         }
         if(!is_Dash){
-            dx = is_Right ? 7f : -7f;
-            if(Pressed && !is_Jump && !bK_DOWN){
+            boolean goAhead;
+            dx = ((goAhead = is_Right ^ look!=Looking.Right) ? 7f : 4.5f) * (is_Right ? 1f : -1f);
+            if(goAhead && Pressed && !is_Jump && !bK_DOWN){
                 if(canDash > 0){is_Dash = true;}
                 canDash = 7;
             }
@@ -234,39 +335,6 @@ class FighterA extends ChinChinPlayerBase{
 
     @Override
     public void Action() {
-        if(stun <= 0){
-            if(bK_WeakAttack){WeakAttack(false);}
-            else if(bK_StrongAttack){StrongAttack(false);}
-
-            if(bK_LEFT || bK_RIGHT){ Move(bK_RIGHT, false); }else{
-                canDash--;
-                if(is_Dash){is_Dash = false;}
-                if(!is_Jump){dx = 0;}
-            }
-
-            if(bK_UP){Jump(false);}
-            else if(bK_DOWN){Squat(false);}
-
-            //横方向移動
-            position.x += dx;
-            if(position.x<0){
-                dx = 0;
-                position.x = 0;
-            }else if(position.x>rightLine){
-                dx = 0;
-                position.x = rightLine;
-            }
-
-            //攻撃情報を扱う
-            if(attackInfo != null){
-               // attackInfo.;
-            }
-        }else{
-            stun--;
-            canAttack = false;
-            attackInfo = null;
-        }
-
         super.Action();
     }
 }
@@ -278,7 +346,7 @@ enum Looking{
 
     private final float value;
 
-    private Looking(final float value){
+    Looking(final float value){
         this.value = value;
     }
 
@@ -287,41 +355,127 @@ enum Looking{
     }
 }
 
-//攻撃情報管理クラス
+//攻撃情報管理クラス、攻撃のたびに使い回し
 class AttackInfo{
-    private Point StartingPoint, EndingPoint;//キャラ座標を基準とする攻撃の始点終点(右基準)
-    private int Duration, Interval;//攻撃継続時間, 現在の時間, 攻撃後入力を受け付けない時間 (基本的にはDuration >= Interval、モーションの時間とも一致させたら楽だと思う)
-    private int Damage;//ダメージ量
-    private int id;//攻撃ID
+    private Point StartingPoint, RangePoint;//キャラ座標を基準とする攻撃の始点終点(右基準)
+    private int sOccurrence, sDuration, sInterval, NowFrame = 0;//攻撃判定が始まる時間, 攻撃継続時間, 攻撃後入力を受け付けない時間 (基本的にはDuration >= Interval、モーションの時間とも一致させたら楽だと思う), 現在の経過時間
+    private int Damage, stun;//ダメージ量
+    private int id, mode;//攻撃ID, 攻撃の状態(updateメソッド参照)
     private boolean alreadyHit = false;//既に攻撃判定を終えているか
+    private Point OwnSize, OpponentSize;//互いのプレイヤーの大きさ
+    private boolean isHaving = false;//攻撃情報を所持している
+    private int ContinuousHit, NowContinuousHit;//多段ヒット攻撃の時、次弾ヒットまでの時間を登録。単発攻撃なら9999をセットする。
+    private Point2D.Float Force;//攻撃時の加力ベクトル
+    private Point2D.Float OwnPos;//自身の座標
+    private ChinChinPlayerBase Opponent;
+    private Looking look;//右向いているか否か
 
-    public AttackInfo(Point StartingPoint, Point EndingPoint, int Duration, int Interval, int Damage, int id){
+
+    public AttackInfo(ChinChinPlayerBase Own, ChinChinPlayerBase Opponent){
+        this.OwnSize = Own.getMySize();
+        this.OpponentSize = Opponent.getMySize();
+        this.Opponent = Opponent;
+    }
+
+    public void setInfo(Point StartingPoint, Point RangePoint, int Occurrence,  int Duration, int Interval,int ContinuousHit, int Damage, Point2D.Float Force, int stun, int id){
         this.StartingPoint = StartingPoint;
-        this.EndingPoint = EndingPoint;
-        this.Duration = Duration;
+        this.RangePoint = RangePoint;
+        this.sOccurrence = Occurrence;
+        this.sDuration = Duration + Occurrence;
+        this.sInterval = Interval + Duration + Occurrence;
+        this.ContinuousHit = this.NowContinuousHit = ContinuousHit;
         this.Damage = Damage;
-        this.Interval = Interval;
+        this.Force = Force;
+        this.stun = stun;
         this.id = id;
+        NowFrame = 0;
+        isHaving = true;
+        alreadyHit = false;
     }
 
     //アクセサメソッド
     public Point getStartingPoint(){ return StartingPoint; }
-    public Point getEndingPoint(){ return EndingPoint; }
-    public int getDuration(){ return Duration; }
+    public Point getRangePoint(){ return RangePoint; }
     public int getDamage(){ return Damage; }
+    public void setHaving(boolean isHaving){ this.isHaving = isHaving; }
+    public boolean isHaving(){ return isHaving; }
 
-    //継続時間を管理する
-    public boolean reduceDuration(){ return Duration-- < 0;}
-    //入力受けつけを管理する
-    public boolean reduceInterval(){ return Interval-- < 0;}
+    //継続時間を管理する。現在の状態を数値として返す
+    public int update(){
+        NowFrame++;
+        if(NowFrame > sInterval){
+            isHaving = false;
+            return mode = 3; //AfterInterval
+        }else if(NowFrame > sDuration){
+            return mode = 2; //Interval
+        }else if(NowFrame > sOccurrence){
+            return mode = 1; //Attacking
+        }else{
+            return mode = 0; //BeforeAttacking
+        }
+    }
 
     //当たり判定の確認を行う
-    public boolean judgeHitted(Point p, Point opS, Point opE){
-        //pの座標,opの当たり判定の範囲が引数
-        boolean isHitted = p.x + EndingPoint.x >= opS.x && p.x + StartingPoint.x <= opE.x &&
-                p.y + EndingPoint.y >= opS.y && p.y + StartingPoint.y <= opE.y;
-        alreadyHit |= isHitted;
-        return isHitted && !alreadyHit;
+    public boolean judgeHitted(Looking look, Point2D.Float OwnPos, Point2D.Float OpponentPos){
+        //既に攻撃はヒットした
+        if (alreadyHit){
+            if (NowContinuousHit-- > 0){
+                return false;
+            }else{
+                //次弾までの時間が過ぎた
+                NowContinuousHit = ContinuousHit;
+                alreadyHit = false;
+            }
+        }
+
+        //自身の向きを引数に。向きが左ならば全てを反転して右向きとして考える。
+        this.look = look;
+        this.OwnPos = OwnPos;
+        Point2D.Float rightOwnPos, rightOpponentPos;
+        if(look == Looking.Right){
+            rightOwnPos = OwnPos;
+            rightOpponentPos = OpponentPos;
+        }else{
+            rightOwnPos = new Point2D.Float(ChinChinFighter.SCREEN_WIDTH - OwnPos.x - OwnSize.x, OwnPos.y);
+            rightOpponentPos = new Point2D.Float(ChinChinFighter.SCREEN_WIDTH - OpponentPos.x - OpponentSize.x, OpponentPos.y);
+        }
+
+        boolean isHitted = rightOwnPos.x + StartingPoint.x + RangePoint.x >= rightOpponentPos.x && rightOwnPos.x + StartingPoint.x <= rightOpponentPos.x + OpponentSize.y &&
+                rightOwnPos.y + StartingPoint.y + RangePoint.y >= rightOpponentPos.y && rightOwnPos.y + StartingPoint.y <= rightOpponentPos.y + OpponentSize.y;
+        //デバッグ
+        if(isHitted){
+            System.out.println("Hit");
+        }
+        alreadyHit = isHitted;
+        return isHitted;
+    }
+
+    public void ConfirmAttack(){
+        System.out.println(Force != null);
+        Opponent.ConfirmDamage(new Point2D.Float(Force.x * look.getValue(), Force.y), stun, Damage);
+    }
+
+    //デバッグ用攻撃範囲描画(右向き描画のみ対応)
+    public void print(Graphics g, Point2D.Float OwnPos){
+        if(isHaving){
+            switch (mode){
+                case 0:
+                    g.setColor(Color.BLUE);
+                    break;
+                case 1:
+                    g.setColor(Color.RED);
+                    break;
+                case 2:
+                    g.setColor(Color.ORANGE);
+                    break;
+                case 3:
+                    g.setColor(Color.GREEN);
+                    break;
+            }
+
+            g.fillRect((int) OwnPos.x + StartingPoint.x, (int) OwnPos.y + StartingPoint.y, RangePoint.x, RangePoint.y);
+
+        }
     }
 }
 
@@ -335,6 +489,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
     private Point2D.Float p1position, p2position;
     private Point p1size, p2size;
     private Image p1image, p2image;
+    private AttackInfo p1AttackInfo, p2AttackInfo;
 
     public ChinChinFrameView(ChinChinFighter chinChinFighter){
         this.chinChinFighter = chinChinFighter;
@@ -345,12 +500,17 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         //プレイヤー1
         p1size = new Point(120, 120);
         player1 = new FighterA(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, ChinChinFighter.SCREEN_HEIGHT-p1size.y, p1size.x, p1size.y, true);
-        this.add(player1);
 
         //プレイヤー2
         p2size = new Point(120 , 120);
         player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, ChinChinFighter.SCREEN_WIDTH-p2size.x, ChinChinFighter.SCREEN_HEIGHT-p2size.y, p2size.x, p2size.y, false);
-        this.add(player2);
+
+        //互いの対戦相手の情報を交換する
+        player1.setOpponentPlayer(player2);
+        player2.setOpponentPlayer(player1);
+        //攻撃情報管理クラス(AttackInfo)を準備する
+        player1.setAttackInfo(player2);
+        player2.setAttackInfo(player1);
 
         setFocusable(true);
         addKeyListener(this);
@@ -362,6 +522,49 @@ class ChinChinFrameView extends JPanel implements KeyListener{
             public void run() {
                 player1.Action();
                 player2.Action();
+
+                p1position = player1.getPosition();
+                p2position = player2.getPosition();
+
+                //攻撃を扱う
+                p1AttackInfo = player1.getAttackInfo();
+                p2AttackInfo = player2.getAttackInfo();
+                boolean p2Hitted = false, p1Hitted = false;
+                int p1mode, p2mode;
+                //"AttackInfo.update()==1" means "Attacking".
+                if(p1AttackInfo.isHaving()){
+                    switch (p1mode = p1AttackInfo.update()){
+                        case 1:
+                            p2Hitted = p1AttackInfo.judgeHitted(player1.getLook(), p1position, p2position);
+                            break;
+                        case 2:
+                        case 3:
+                            player1.setCanAttack(true);
+                            break;
+                    }
+
+                }
+                if(p2AttackInfo.isHaving()){
+                    switch (p2mode = p2AttackInfo.update()){
+                        case 1:
+                            p1Hitted = p2AttackInfo.judgeHitted(player2.getLook(), p2position, p1position);
+                            break;
+                        case 2:
+                        case 3:
+                            player2.setCanAttack(true);
+                            break;
+                    }
+
+                }
+                if(p2Hitted){
+                    p1AttackInfo.ConfirmAttack();
+                    p2AttackInfo.setHaving(false);
+                }
+                if(p1Hitted){
+                    p2AttackInfo.ConfirmAttack();
+                    p1AttackInfo.setHaving(false);
+                }
+
                 repaint();
             }
         }, 0, 20);
@@ -369,9 +572,6 @@ class ChinChinFrameView extends JPanel implements KeyListener{
 
     @Override
     public void paint(Graphics g){
-        p1position = player1.getPosition();
-        p2position = player2.getPosition();
-
         //位置を渡してついでにJump判定もやってもらうことにした
         if((p1image = player1.getNowImage()) != null) {
             //(p1 < p2) -> lookingRight
@@ -398,8 +598,14 @@ class ChinChinFrameView extends JPanel implements KeyListener{
             }
         }
 
-        //当たり判定デバッグ用
+        //fillRectでHPを表示してます。
+        g.setColor(new Color(0, 200, 0));
+        g.fillRect(320-player1.getHP()*3, 10, player1.getHP()*3, 20);
+        g.fillRect(400, 10, player2.getHP()*3, 20);
 
+        //当たり判定デバッグ用
+        p1AttackInfo.print(g, p1position);
+        p2AttackInfo.print(g, p2position);
         //
     }
 
