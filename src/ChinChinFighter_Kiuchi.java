@@ -1,4 +1,4 @@
-import javax.swing.*;
+import javax.swing.*;import javax.swing.*;
 import javax.swing.text.Position;
 import java.awt.*;
 import java.awt.event.*;
@@ -173,7 +173,7 @@ class FighterA extends ChinChinPlayerBase{
         return HP;
     }
 
-    @Override
+    @Override 
     protected void setHP(int HP){
         this.HP = HP;
     }
@@ -339,11 +339,36 @@ class AttackInfo{
     }
 }
 
+class GameTime implements ActionListener{
+    private javax.swing.Timer gameTime; //ゲーム時間を管理
+    private int time;
+
+    public GameTime(int time){
+        this.time = time;
+        gameTime = new javax.swing.Timer(1000, this);
+        gameTime.start();
+    }
+
+    public String getTime(){ 
+        return String.format("%d", time);
+    }
+
+    public void setTime(){
+        time--;
+    }
+
+    public void actionPerformed(ActionEvent e){
+        this.setTime();
+    }
+}
+
 //-------------------------------------------------------画面構成&ゲーム管理クラス
 
 class ChinChinFrameView extends JPanel implements KeyListener{
     private java.util.Timer gameThread;//ゲーム用スレッド
+    private GameTime gameTime;
     private ChinChinFighter chinChinFighter;
+    private JLabel timeLabel;
 
     private ChinChinPlayerBase player1, player2;
     private Point2D.Float p1position, p2position;
@@ -354,7 +379,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         this.chinChinFighter = chinChinFighter;
         this.setSize(ChinChinFighter.SCREEN_WIDTH, ChinChinFighter.HEIGHT);
         this.setBackground(new Color(150,255,255));
-        this.setLayout(new GridLayout(1,2));
+        this.setLayout(null);
 
         //プレイヤー1
         p1size = new Point(120, 120);
@@ -362,9 +387,18 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         this.add(player1);
 
         //プレイヤー2
-        p2size = new Point(120 , 120);
+        p2size = new Point(120, 120);
         player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, ChinChinFighter.SCREEN_WIDTH-p2size.x, ChinChinFighter.SCREEN_HEIGHT-p2size.y, p2size.x, p2size.y, false);
         this.add(player2);
+
+        //timer
+        gameTime = new GameTime(120);
+        Font font = new Font(Font.SANS_SERIF, JLabel.CENTER, 32);
+        timeLabel = new JLabel("120", JLabel.CENTER);
+        timeLabel.setBackground(Color.B);
+        timeLabel.setFont(font);
+        timeLabel.setOpaque(true);
+        this.add(timeLabel);
 
         setFocusable(true);
         addKeyListener(this);
@@ -417,6 +451,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         g.fillRect(320-player1.getHP()*3, 10, player1.getHP()*3, 20);
         g.fillRect(400, 10, player2.getHP()*3, 20);
 
+        timeLabel.setText(gameTime.getTime());
         //当たり判定デバッグ用
 
         //
