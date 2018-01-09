@@ -2,6 +2,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.Point2D;
+import java.applet.AudioClip;
 
 import java.util.*;
 
@@ -21,14 +22,20 @@ abstract class ChinChinPlayerBase extends JPanel {
     protected int HP;//キャラの体力
     protected Point2D.Float position; //キャラの座標
     protected float dy, dx;
-    protected Point size;//キャラのサイズ
+    protected Point size, range, startRange;//キャラのサイズ, あたり範囲のサイズ, あたり判定のスタート(右向き基準, 左向き基準)
     protected int underLine, rightLine;//ステージ下限右限
     protected int stun, canDash;//行動不自由時間, ダッシュ状態を受け付けている時間
-    protected Image nowImage;
     protected Looking look; //右を向いているか
     protected ChinChinPlayerBase OpponentPlayer;//対戦相手
 
-    public ChinChinPlayerBase(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, int sizeX, int sizeY, boolean is_Right){
+    protected TreeMap<String, Image> Images;//グラフィック管理
+    protected String NowImageName;//呼び出す画像の名前
+    protected boolean RequestedPlayAudio = false;//音楽再生のリクエスト。流して欲しいならtrue;
+    protected String NowRequestedPlayAudio;//リクエストする名前
+
+    protected boolean Debugmessage = false;
+
+    public ChinChinPlayerBase(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, Point size, Point range, Point startRange, boolean is_Right){
         //操作ボタンコード
         this.K_UP = K_UP;
         this.K_DOWN = K_DOWN;
@@ -43,12 +50,18 @@ abstract class ChinChinPlayerBase extends JPanel {
             look = Looking.Left;
         }
 
-        underLine = ChinChinFighter.SCREEN_HEIGHT * 9 / 10 - sizeY;
-        rightLine = ChinChinFighter.SCREEN_WIDTH - sizeX;
+        underLine = ChinChinFighter.SCREEN_HEIGHT * 9 / 10 - size.y;
+        rightLine = ChinChinFighter.SCREEN_WIDTH - size.x;
 
         //座標設定
         position = new Point2D.Float(positionX, underLine);
-        size = new Point(sizeX, sizeY);
+        this.size = size;
+        this.range = range;
+        this.startRange = startRange;
+
+        //画像設定
+        Images = new TreeMap<String, Image>();
+        RegisterImage();
     }
 
     public void keyPressed(KeyEvent e) {
@@ -105,8 +118,14 @@ abstract class ChinChinPlayerBase extends JPanel {
     abstract protected void Move(boolean is_Right, boolean Pressed);
     //一連の行動を管理する
     public void Action(){
-        if(canAttack = stun == 0 || stun < 0){
+        //デバッグ
+        if(Debugmessage){System.out.println(canAttack + " " + stun);}
+
+        if(canAttack && stun <= 0){
+            //デバッグ
+            if(Debugmessage){System.out.println("B");}
             if(!attackInfo.isHaving()) {
+
                 if (attackId != -1 && canCombo-- <= 0) {
                     attackId = -1;
                 }
@@ -125,6 +144,7 @@ abstract class ChinChinPlayerBase extends JPanel {
                     }
                     if (!is_Jump) {
                         dx = 0;
+                        if(Debugmessage){System.out.println("A");}
                     }
                 }
 
@@ -136,8 +156,6 @@ abstract class ChinChinPlayerBase extends JPanel {
             }
 
         }else{
-            canCombo = 0;
-            attackId = -1;
             stun--;
         }
 
@@ -167,7 +185,18 @@ abstract class ChinChinPlayerBase extends JPanel {
         }
     }
 
-    public Image getNowImage(){ return nowImage; }
+    abstract public void RegisterImage();
+    abstract public void RegisterAudioClip(TreeMap<String, AudioClip> audios);
+
+    public Image getNowImage(){ return Images.get(NowImageName); }
+    public void setNowImageName(String nowImageName){ NowImageName = nowImageName; }
+    public String getNowRequestedPlayAudio(){
+        if(RequestedPlayAudio){
+            RequestedPlayAudio = false;
+            return NowRequestedPlayAudio;
+        }
+        return null;
+    }
 
     public Point2D.Float getPosition(){ return position; }
 
@@ -175,27 +204,31 @@ abstract class ChinChinPlayerBase extends JPanel {
     public boolean ConfirmDamage(Point2D.Float Force, int stun, int damage){
         if(canBlock){
             //デバッグ
-            System.out.println("Blocked");
+            if(Debugmessage){System.out.println("Blocked");}
 
             //ブロック出来る時
             HP -= damage/2;
         }else{
             //デバッグ
-            System.out.println("Directwed");
+            if (Debugmessage){System.out.println("Directed");}
 
             //出来ない時
             HP -= damage;
             this.stun = stun;
+            canCombo = 0;
+            attackId = -1;
             dx = Force.x;
             dy = Force.y;
             is_Jump |= dy < 0f;//is_Jumpがfalseの時上方向加力するならtrueに
-            canAttack = false;
+            canAttack = true;
         }
         canCombo = 0; attackId = -1;
         return HP>0;
     }
 
     public Point getMySize(){return size;}
+    public Point getRange(){ return  range;}
+    public Point getStartRange(){return startRange;}
 
     //向き情報を設定し返す
     public Looking setgetLook(Point2D.Float OpponentPos){
@@ -221,16 +254,16 @@ abstract class ChinChinPlayerBase extends JPanel {
     public void setAttackInfo(ChinChinPlayerBase Opponent){ attackInfo = new AttackInfo(this, Opponent); }
     public void setCanAttack(boolean canAttack){ this.canAttack = canAttack; }
 
+    public void setDebugmessage(boolean debugmessage){Debugmessage = debugmessage;}
+
 }
 
 //操作キャラA
 class FighterA extends ChinChinPlayerBase{
 
-    public FighterA(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, float positionY, int sizeX, int sizeY, boolean is_Right){
-        super(K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack, positionX, sizeX, sizeY, is_Right);
+    public FighterA(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, float positionY, Point size, Point range, Point startRange, boolean is_Right){
+        super(K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack, positionX, size, range, startRange, is_Right);
         HP = 100;//体力セット
-
-        nowImage = Toolkit.getDefaultToolkit().getImage(getClass().getResource("resources/playerADammy.png"));
     }
 
     @Override
@@ -276,19 +309,26 @@ class FighterA extends ChinChinPlayerBase{
                     dx = 0f;
                     switch (attackId) {
                         default:
+                            NowImageName = "Punch";
+                            RequestedPlayAudio = true;
+                            NowRequestedPlayAudio = "Punch";
                             attackInfo.setInfo(new Point(100, 30), new Point(40, 40), 0, 5, 0, 9999, 10, new Point2D.Float(3f, -5f), 7, 1);
                             attackId = 1;
                             canCombo = 7;
                             canAttack = false;
                             break;
                         case 1:
+                            NowImageName = "Punch";
+                            RequestedPlayAudio = true;
                             attackInfo.setInfo(new Point(100, 30), new Point(50, 40), 0, 5, 0, 9999, 10, new Point2D.Float(3f, -10f), 7, 2);
                             attackId = 2;
                             canCombo = 7;
                             canAttack = false;
                             break;
                         case 2:
-                            attackInfo.setInfo(new Point(100, 30), new Point(70, 40), 0, 20, 10, 9999, 10, new Point2D.Float(30f, -20f), 30, 3);
+                            NowImageName = "Punch";
+                            RequestedPlayAudio = true;
+                            attackInfo.setInfo(new Point(100, 30), new Point(70, 40), 0, 20, 10, 9999, 10, new Point2D.Float(30f, -20f), 30, -1);
                             attackId = -1;
                             canCombo = 0;
                             canAttack = false;
@@ -315,7 +355,7 @@ class FighterA extends ChinChinPlayerBase{
 
     @Override
     protected void Move(boolean is_Right ,boolean Pressed) {
-        if(stun > 0){return;}
+        if(stun > 0){ return;}
         if(before_Right != is_Right){
             canDash = 0;
         }
@@ -336,6 +376,20 @@ class FighterA extends ChinChinPlayerBase{
     @Override
     public void Action() {
         super.Action();
+    }
+
+    //最初に画像登録を行う
+    @Override
+    public void RegisterImage() {
+        NowImageName = "Stand";
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        Images.put("Stand", toolkit.getImage(getClass().getResource("resources/playerADammy.png")));
+        Images.put("Punch", toolkit.getImage(getClass().getResource("resources/playerADammyPunch.png")));
+    }
+
+    @Override
+    public void RegisterAudioClip(TreeMap<String, AudioClip> audios) {
+
     }
 }
 
@@ -362,19 +416,23 @@ class AttackInfo{
     private int Damage, stun;//ダメージ量
     private int id, mode;//攻撃ID, 攻撃の状態(updateメソッド参照)
     private boolean alreadyHit = false;//既に攻撃判定を終えているか
-    private Point OwnSize, OpponentSize;//互いのプレイヤーの大きさ
+    private Point OwnSize, OpponentSize, OpponentRange, OpponentStartRange;//互いのプレイヤーの大きさ, 相手の当たり判定のサイズ, 相手の当たり判定の開始位置(右基準)
     private boolean isHaving = false;//攻撃情報を所持している
     private int ContinuousHit, NowContinuousHit;//多段ヒット攻撃の時、次弾ヒットまでの時間を登録。単発攻撃なら9999をセットする。
     private Point2D.Float Force;//攻撃時の加力ベクトル
     private Point2D.Float OwnPos;//自身の座標
-    private ChinChinPlayerBase Opponent;
+    private ChinChinPlayerBase Own, Opponent;
     private Looking look;//右向いているか否か
+
 
 
     public AttackInfo(ChinChinPlayerBase Own, ChinChinPlayerBase Opponent){
         this.OwnSize = Own.getMySize();
-        this.OpponentSize = Opponent.getMySize();
+        this.Own = Own;
         this.Opponent = Opponent;
+        this.OpponentSize = Opponent.getMySize();
+        this.OpponentRange = Opponent.getRange();
+        this.OpponentStartRange = Opponent.getStartRange();
     }
 
     public void setInfo(Point StartingPoint, Point RangePoint, int Occurrence,  int Duration, int Interval,int ContinuousHit, int Damage, Point2D.Float Force, int stun, int id){
@@ -394,8 +452,6 @@ class AttackInfo{
     }
 
     //アクセサメソッド
-    public Point getStartingPoint(){ return StartingPoint; }
-    public Point getRangePoint(){ return RangePoint; }
     public int getDamage(){ return Damage; }
     public void setHaving(boolean isHaving){ this.isHaving = isHaving; }
     public boolean isHaving(){ return isHaving; }
@@ -405,6 +461,7 @@ class AttackInfo{
         NowFrame++;
         if(NowFrame > sInterval){
             isHaving = false;
+            Own.setNowImageName("Stand");
             return mode = 3; //AfterInterval
         }else if(NowFrame > sDuration){
             return mode = 2; //Interval
@@ -487,9 +544,13 @@ class ChinChinFrameView extends JPanel implements KeyListener{
 
     private ChinChinPlayerBase player1, player2;
     private Point2D.Float p1position, p2position;
-    private Point p1size, p2size;
+    private Point p1size, p2size, p1range, p2range, p1startRange, p2startRange;
     private Image p1image, p2image;
     private AttackInfo p1AttackInfo, p2AttackInfo;
+
+    private TreeMap<String, AudioClip> audios;
+
+    int c = 0;//デバッグ
 
     public ChinChinFrameView(ChinChinFighter chinChinFighter){
         this.chinChinFighter = chinChinFighter;
@@ -499,11 +560,15 @@ class ChinChinFrameView extends JPanel implements KeyListener{
 
         //プレイヤー1
         p1size = new Point(120, 120);
-        player1 = new FighterA(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, ChinChinFighter.SCREEN_HEIGHT-p1size.y, p1size.x, p1size.y, true);
+        p1range = new Point(30, 70);
+        p1startRange = new Point(45, 50);
+        player1 = new FighterA(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, ChinChinFighter.SCREEN_HEIGHT-p1size.y, p1size, p1range, p1startRange, true);
 
         //プレイヤー2
         p2size = new Point(120 , 120);
-        player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, ChinChinFighter.SCREEN_WIDTH-p2size.x, ChinChinFighter.SCREEN_HEIGHT-p2size.y, p2size.x, p2size.y, false);
+        p2range = new Point(30, 70);
+        p2startRange = new Point(45, 50);
+        player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, ChinChinFighter.SCREEN_WIDTH-p2size.x, ChinChinFighter.SCREEN_HEIGHT-p2size.y, p2size, p2range, p2startRange, false);
 
         //互いの対戦相手の情報を交換する
         player1.setOpponentPlayer(player2);
@@ -512,8 +577,16 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         player1.setAttackInfo(player2);
         player2.setAttackInfo(player1);
 
+        //効果音登録
+        audios = new TreeMap<String, AudioClip>();
+        RegisterAudioClip();
+
         setFocusable(true);
         addKeyListener(this);
+
+        //デバッグ用
+        player1.setDebugmessage(false);
+        player2.setDebugmessage(true);
 
         //
         gameThread = new java.util.Timer();
@@ -537,8 +610,8 @@ class ChinChinFrameView extends JPanel implements KeyListener{
                         case 1:
                             p2Hitted = p1AttackInfo.judgeHitted(player1.getLook(), p1position, p2position);
                             break;
-                        case 2:
                         case 3:
+                            System.out.println(p1mode + "called " + c++);
                             player1.setCanAttack(true);
                             break;
                     }
@@ -549,7 +622,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
                         case 1:
                             p1Hitted = p2AttackInfo.judgeHitted(player2.getLook(), p2position, p1position);
                             break;
-                        case 2:
+
                         case 3:
                             player2.setCanAttack(true);
                             break;
@@ -572,6 +645,7 @@ class ChinChinFrameView extends JPanel implements KeyListener{
 
     @Override
     public void paint(Graphics g){
+        super.paint(g);
         //位置を渡してついでにJump判定もやってもらうことにした
         if((p1image = player1.getNowImage()) != null) {
             //(p1 < p2) -> lookingRight
@@ -603,6 +677,12 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         g.fillRect(320-player1.getHP()*3, 10, player1.getHP()*3, 20);
         g.fillRect(400, 10, player2.getHP()*3, 20);
 
+        //SE再生
+        String p1RequestName = player1.getNowRequestedPlayAudio();
+        if (p1RequestName!= null){ PlaySoundEffect(p1RequestName);}
+        String p2RequestName = player2.getNowRequestedPlayAudio();
+        if (p2RequestName!= null){ PlaySoundEffect(p2RequestName);}
+
         //当たり判定デバッグ用
         p1AttackInfo.print(g, p1position);
         p2AttackInfo.print(g, p2position);
@@ -625,6 +705,19 @@ class ChinChinFrameView extends JPanel implements KeyListener{
         player1.keyReleased(e);
         player2.keyReleased(e);
     }
+
+    private void RegisterAudioClip(){
+        audios.put("Punch", java.applet.Applet.newAudioClip(getClass().getResource("resources/punch_middle.wav")));
+        player1.RegisterAudioClip(audios);
+        player2.RegisterAudioClip(audios);
+    }
+
+    private void PlaySoundEffect(String reqestedSoundName){
+        AudioClip audioClip = audios.get(reqestedSoundName);
+
+        audioClip.play();
+    }
+
 }
 
 public class ChinChinFighter extends JFrame {
@@ -635,10 +728,13 @@ public class ChinChinFighter extends JFrame {
         chinChinFrameView = new ChinChinFrameView(this);
         this.setSize(SCREEN_WIDTH,  SCREEN_HEIGHT);
         this.add(chinChinFrameView);
+
         this.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         this.setResizable(false);
         this.setVisible(true);
     }
+
+
 
     public static void main(String argv[]){
         new ChinChinFighter();
