@@ -5,13 +5,14 @@ import java.awt.geom.Point2D;
 import java.applet.AudioClip;
 
 import java.util.*;
+import java.util.List;
 
 //操作キャラベース-----------------------------------------------------------
 
 abstract class UECPlayerBase  {
     private final int K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack;//操作ボタンコード
     protected boolean bK_UP = false, bK_DOWN = false, bK_LEFT = false, bK_RIGHT = false, bK_WeakAttack = false, bK_StrongAttack = false;//操作ボタンのフラグ
-    protected boolean is_Jump = false, is_HighJump = false, is_Dash = false, is_Squat = false;//ジャンプ,二段ジャンプ中かダッシュ中かしゃがみ中かどうか
+    protected boolean is_Jump = false, is_HighJump = false, is_Dash = false, is_Squat = false, is_Down;//ジャンプ,二段ジャンプ中かダッシュ中かしゃがみ中かダウン中かどうか
     protected int walkCount;//歩いている時に足踏みを管理する
 
     protected boolean canAttack = true;//攻撃行動できるかどうか
@@ -33,8 +34,7 @@ abstract class UECPlayerBase  {
 
     protected TreeMap<String, Image> Images;//グラフィック管理
     protected String NowImageName;//呼び出す画像の名前
-    protected boolean RequestedPlayAudio = false;//音楽再生のリクエスト。流して欲しいならtrue;
-    protected String NowRequestedPlayAudio;//リクエストする名前
+    protected List<String> NowRequestedPlayAudios;//リクエストする名前
 
     protected boolean Debugmessage = false;
 
@@ -67,6 +67,9 @@ abstract class UECPlayerBase  {
         //画像設定
         Images = new TreeMap<String, Image>();
         RegisterImage();
+
+        //音声設定
+        NowRequestedPlayAudios = new ArrayList<String>();
     }
 
     public void keyPressed(KeyEvent e) {
@@ -140,8 +143,9 @@ abstract class UECPlayerBase  {
                 if (bK_LEFT || bK_RIGHT) {
                     Move(bK_RIGHT, false);
                 } else {
-
-                    NowImageName = "Stand";
+                    if(!is_Down) {
+                        NowImageName = "Stand";
+                    }
                     canDash--;
                     if (is_Dash) {
                         is_Dash = false;
@@ -195,12 +199,8 @@ abstract class UECPlayerBase  {
 
     public Image getNowImage(){ return Images.get(NowImageName); }
     public void setNowImageName(String nowImageName){ NowImageName = nowImageName; }
-    public String getNowRequestedPlayAudio(){
-        if(RequestedPlayAudio){
-            RequestedPlayAudio = false;
-            return NowRequestedPlayAudio;
-        }
-        return null;
+    public List<String> getNowRequestedPlayAudio(){
+        return NowRequestedPlayAudios;
     }
 
     public Point2D.Float getPosition(){ return position; }
@@ -269,9 +269,9 @@ abstract class UECPlayerBase  {
 }
 
 //操作キャラA
-class FighterA extends UECPlayerBase{
+class NaoChan extends UECPlayerBase{
 
-    public FighterA(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, float positionY, float magnification, Point size, Point range, Point startRange, boolean is_Right){
+    public NaoChan(int K_UP, int K_DOWN, int K_LEFT, int K_RIGHT, int K_WeakAttack, int K_StrongAttack, float positionX, float positionY, float magnification, Point size, Point range, Point startRange, boolean is_Right){
         super(K_UP, K_DOWN, K_LEFT, K_RIGHT, K_WeakAttack, K_StrongAttack, positionX, magnification, size, range, startRange, is_Right);
         HP = 100;//体力セット
     }
@@ -321,8 +321,7 @@ class FighterA extends UECPlayerBase{
                     switch (attackId) {
                         default:
                             NowImageName = "Punch1";
-                            RequestedPlayAudio = true;
-                            NowRequestedPlayAudio = "Punch";
+                            NowRequestedPlayAudios.add("Punch");
                             attackInfo.setInfo(new Point(100, 30), new Point(40, 40), 0, 5, 0, 9999, 10, new Point2D.Float(3f, -5f), 7, 1);
                             attackId = 1;
                             canCombo = 7;
@@ -330,7 +329,7 @@ class FighterA extends UECPlayerBase{
                             break;
                         case 1:
                             NowImageName = "Punch2";
-                            RequestedPlayAudio = true;
+                            NowRequestedPlayAudios.add("Punch");
                             attackInfo.setInfo(new Point(100, 30), new Point(50, 40), 0, 5, 0, 9999, 10, new Point2D.Float(3f, -10f), 7, 2);
                             attackId = 2;
                             canCombo = 7;
@@ -338,7 +337,7 @@ class FighterA extends UECPlayerBase{
                             break;
                         case 2:
                             NowImageName = "Kick3";
-                            RequestedPlayAudio = true;
+                            NowRequestedPlayAudios.add("Punch");
                             attackInfo.setInfo(new Point(100, 30), new Point(70, 40), 0, 20, 10, 9999, 10, new Point2D.Float(30f, -20f), 30, -1);
                             attackId = -1;
                             canCombo = 0;
@@ -666,7 +665,7 @@ class PlayerSelect extends JPanel {
         p1_OK = KeyEvent.VK_C; p1_cancel = KeyEvent.VK_V;
         p2_right = KeyEvent.VK_L; p2_left = KeyEvent.VK_J; //p2_up = KeyEvent.VK_I; p2_down = KeyEvent.VK_K;
         p2_OK = KeyEvent.VK_COMMA; p2_cancel = KeyEvent.VK_PERIOD;
-        this.setSize(uecFighter.SCREEN_WIDTH, uecFighter.SCREEN_HEIGHT);
+        this.setSize(UECFighter.SCREEN_WIDTH, UECFighter.SCREEN_HEIGHT);
         this.setBackground(Color.black);
         this.setLayout(null);
         image_1 = new ImageIcon("resources/kiuch.JPG");
@@ -777,7 +776,7 @@ class UECFrameView extends JPanel {//implements KeyListener{
     private UECPlayerBase player1, player2;
     private Point2D.Float p1position, p2position;
     private Point p1size, p2size, p1range, p2range, p1startRange, p2startRange;
-    private Image p1image, p2image;
+    private Image p1image, p2image, p1here, p2here;
     private AttackInfo p1AttackInfo, p2AttackInfo;
 
     private TreeMap<String, AudioClip> audios;
@@ -793,14 +792,14 @@ class UECFrameView extends JPanel {//implements KeyListener{
         p1size = new Point((int) (120 * p1magnification), (int) (120 * p1magnification));
         p1range = new Point((int) (30 * p1magnification), (int) (70 * p1magnification));
         p1startRange = new Point((int) (45 * p1magnification), (int) (50 * p1magnification));
-        player1 = new FighterA(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, UECFighter.SCREEN_HEIGHT-p1size.y, p1magnification, p1size, p1range, p1startRange, true);
+        player1 = new NaoChan(KeyEvent.VK_W, KeyEvent.VK_S, KeyEvent.VK_A, KeyEvent.VK_D,  KeyEvent.VK_C, KeyEvent.VK_V, 0, UECFighter.SCREEN_HEIGHT-p1size.y, p1magnification, p1size, p1range, p1startRange, true);
 
         //プレイヤー2
         float p2magnification = 2f;
         p2size = new Point((int) (120 * p2magnification), (int) (120 * p2magnification));
         p2range = new Point((int) (30 * p2magnification), (int) (70 * p2magnification));
         p2startRange = new Point((int) (45 * p2magnification), (int) (50 * p2magnification));
-        player2 = new FighterA(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, UECFighter.SCREEN_WIDTH-p2size.x, UECFighter.SCREEN_HEIGHT-p2size.y, p2magnification, p2size, p2range, p2startRange, false);
+        player2 = new NaoChan(KeyEvent.VK_I, KeyEvent.VK_K, KeyEvent.VK_J, KeyEvent.VK_L,  KeyEvent.VK_COMMA, KeyEvent.VK_PERIOD, UECFighter.SCREEN_WIDTH-p2size.x, UECFighter.SCREEN_HEIGHT-p2size.y, p2magnification, p2size, p2range, p2startRange, false);
 
         //互いの対戦相手の情報を交換する
         player1.setOpponentPlayer(player2);
@@ -808,6 +807,9 @@ class UECFrameView extends JPanel {//implements KeyListener{
         //攻撃情報管理クラス(AttackInfo)を準備する
         player1.setAttackInfo(player2);
         player2.setAttackInfo(player1);
+        //p1here,p2here準備
+        p1here = Toolkit.getDefaultToolkit().getImage(getClass().getResource("resources/1P.png"));
+        p2here = Toolkit.getDefaultToolkit().getImage(getClass().getResource("resources/2P.png"));
 
         //効果音登録
         audios = new TreeMap<String, AudioClip>();
@@ -866,6 +868,7 @@ class UECFrameView extends JPanel {//implements KeyListener{
                     }
 
                 }
+
                 if(p2Hitted){
                     p1AttackInfo.ConfirmAttack();
                     p2AttackInfo.setHaving(false);
@@ -890,10 +893,14 @@ class UECFrameView extends JPanel {//implements KeyListener{
                 g.drawImage(p1image,
                         (int) p1position.x, (int) p1position.y,
                         p1size.x, p1size.y, null);
+                g.drawImage(p1here,
+                        (int) p1position.x + p1size.x / 2 - 25, UECFighter.SCREEN_HEIGHT - 70, 60, 30, null);
             }else{
                 g.drawImage(p1image,
                         (int) p1position.x + p1size.x, (int) p1position.y,
                         -p1size.x, p1size.y, null);
+                g.drawImage(p1here,
+                        (int) p1position.x + p1size.x / 2 - 25, UECFighter.SCREEN_HEIGHT - 70, 60, 30, null);
             }
         }
         if((p2image = player2.getNowImage()) != null) {
@@ -902,10 +909,14 @@ class UECFrameView extends JPanel {//implements KeyListener{
                 g.drawImage(p2image,
                         (int) p2position.x, (int) p2position.y,
                         p2size.x, p2size.y, null);
+                g.drawImage(p2here,
+                        (int) p2position.x + p2size.x / 2 - 25, UECFighter.SCREEN_HEIGHT - 70, 60, 30, null);
             }else{
                 g.drawImage(p2image,
                         (int) p2position.x + p2size.x, (int) p2position.y,
                         -p2size.x, p2size.y, null);
+                g.drawImage(p2here,
+                        (int) p2position.x + p2size.x / 2 - 25, UECFighter.SCREEN_HEIGHT - 70, 60, 30, null);
             }
         }
 
@@ -915,10 +926,8 @@ class UECFrameView extends JPanel {//implements KeyListener{
         g.fillRect(400, 10, player2.getHP()*3, 20);
 
         //SE再生
-        String p1RequestName = player1.getNowRequestedPlayAudio();
-        if (p1RequestName!= null){ PlaySoundEffect(p1RequestName);}
-        String p2RequestName = player2.getNowRequestedPlayAudio();
-        if (p2RequestName!= null){ PlaySoundEffect(p2RequestName);}
+        PlaySoundEffect(player1.getNowRequestedPlayAudio());
+        PlaySoundEffect(player2.getNowRequestedPlayAudio());
 
         timeLabel.setText(gameTime.getTime());
 
@@ -953,10 +962,13 @@ class UECFrameView extends JPanel {//implements KeyListener{
         player2.RegisterAudioClip(audios);
     }
 
-    private void PlaySoundEffect(String reqestedSoundName){
-        AudioClip audioClip = audios.get(reqestedSoundName);
+    private void PlaySoundEffect(List<String> reqestedSoundNames){
+        while (!reqestedSoundNames.isEmpty()){
+            String soundName = reqestedSoundNames.remove(0);
+            AudioClip audioClip = audios.get(soundName);
+            audioClip.play();
 
-        audioClip.play();
+        }
     }
 
 }
