@@ -140,7 +140,7 @@ abstract class UECPlayerBase  {
                 if (bK_LEFT || bK_RIGHT) {
                     Move(bK_RIGHT, false);
                 } else {
-                    if()
+
                     NowImageName = "Stand";
                     canDash--;
                     if (is_Dash) {
@@ -407,7 +407,10 @@ class FighterA extends UECPlayerBase{
 
     @Override
     public void RegisterAudioClip(TreeMap<String, AudioClip> audios) {
-
+        audios.put("Nao_punch1", java.applet.Applet.newAudioClip(getClass().getResource("resources/punch1.wav")));
+        audios.put("Nao_punch2", java.applet.Applet.newAudioClip(getClass().getResource("resources/slap2.wav")));
+        audios.put("Nao_kick3", java.applet.Applet.newAudioClip(getClass().getResource("resources/kick3.wav")));
+        audios.put("Nao_guard", java.applet.Applet.newAudioClip(getClass().getResource("resources/Nao_guard.wav")));
     }
 }
 
@@ -943,7 +946,9 @@ class UECFrameView extends JPanel {//implements KeyListener{
     }
 
     private void RegisterAudioClip(){
-        audios.put("Punch", java.applet.Applet.newAudioClip(getClass().getResource("resources/punch_middle.wav")));
+        //共有効果音
+        audios.put("Punch", java.applet.Applet.newAudioClip(getClass().getResource("resources/punch1.wav")));
+        //キャラボイス
         player1.RegisterAudioClip(audios);
         player2.RegisterAudioClip(audios);
     }
